@@ -1,0 +1,7 @@
+#!/sbin/openrc-run
+
+name="podman-restart"
+description="Podman Start All Containers With Restart Policy Set To Always"
+command="/usr/bin/podman"
+command_args="--log-level=info start --all --filter restart-policy=always"
+command_user="{{podman_user}}"

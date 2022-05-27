@@ -1,0 +1,84 @@
+- name: "Provision Alpine Linux with rootless Podman support"
+  hosts: all
+  become: yes
+  vars:
+    podman_user_subid_start: 100000
+    podman_user_subid_size: 65536
+  tasks:
+    - name: Enable the cgroups service and ensure its running
+      service:
+        name: cgroups
+        enabled: yes
+        state: started
+
+    - name: Update rc_cgroup_mode to unified in /etc/rc.conf to enable cgroups v2
+      replace:
+        path: /etc/rc.conf
+        regexp: '^#?(rc_cgroup_mode=")(?:.*)(")$'
+        replace: '\1unified\2'
+
+    - name: Reboot the machine to ensure cgroups v2 takes effect
+      reboot: 
+
+    - name: Update repository indexes
+      apk:
+        update_cache: yes
+
+    - name: Upgrade all installed packages to their latest version
+      apk:
+        upgrade: yes
+
+    - name: Enable the community apk repository
+      replace:
+        path: /etc/apk/repositories
+        regexp: '^#?\s*(http.*\/alpine\/v.*\/community)$'
+        replace: '\1'
+
+    - name: Install podman
+      apk:
+        name: podman
+        state: latest
+        update_cache: yes
+
+    - name: Enable the tun kernel module
+      modprobe:
+        name: tun
+
+    - name: Ensure the tun kernel module is enabled on boot
+      lineinfile:
+        path: /etc/modules
+        line: "tun"
+
+    - name: Extract the user details required for rootless podman
+      become: no
+      command: whoami
+      register: podman_user
+
+    - set_fact:
+        podman_user: "{{podman_user.stdout}}"
+
+    - name: Ensure the user details are contained within /etc/subuid
+      lineinfile:
+        path: /etc/subuid
+        line: "{{podman_user}}:{{podman_user_subid_start}}:{{podman_user_subid_size}}"
+
+    - name: Ensure the user details are contained within /etc/subgid
+      lineinfile:
+        path: /etc/subgid
+        line: "{{podman_user}}:{{podman_user_subid_start}}:{{podman_user_subid_size}}"
+
+    - name: Update podman with the subuid/subgid changes that were made
+      command: podman system migrate
+
+    - name: Create a /etc/init.d/podman-restart service file to support restart=always on boot
+      template:
+        src: resources/podman-restart.openrc
+        dest: /etc/init.d/podman-restart
+        mode: "755"
+        force: no
+
+    - name: Enable the podman-restart service and ensure its running
+      service:
+        name: podman-restart
+        enabled: yes
+        state: started
