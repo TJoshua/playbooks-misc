@@ -1,0 +1,74 @@
+- name: Check for an existing etcd install
+  stat:
+    path: "{{etcd_install_path}}/etcd"
+  register: etcd_installed
+
+- name: Extract the result of the etcd install check
+  set_fact:
+    etcd_installed: "{{etcd_installed.stat.exists | bool}}"
+
+- name: Create the etcd install directory
+  when: not etcd_installed
+  file:
+    path: "{{etcd_install_path}}"
+    state: directory
+    mode: "0750"
+
+- name: Create the etcd storage directory
+  when: not etcd_installed
+  file:
+    path: "{{etcd_data_path}}"
+    state: directory
+    mode: "0700"
+
+- name: Download a tarball of the etcd release
+  when: not etcd_installed
+  get_url:
+    url: "https://github.com/etcd-io/etcd/releases/download/{{etcd_version}}/etcd-{{etcd_version}}-linux-amd64.tar.gz"
+    dest: "$HOME/etcd.tar.gz"
+
+- name: Untar the etcd release into the install folder
+  when: not etcd_installed
+  unarchive:
+    remote_src: yes
+    src: "$HOME/etcd.tar.gz"
+    dest: "{{etcd_install_path}}"
+    extra_opts:
+      - --strip-components=1
+
+- name: Clean up the etcd tarball
+  file:
+    path: "$HOME/etcd.tar.gz"
+    state: absent
+
+- name: Define a new system service file for etcd
+  template:
+    src: templates/etcd.service.tpl
+    dest: /etc/systemd/system/etcd.service
+
+- name: Check to see if firewalld is installed and enabled
+  shell: '[ $(firewall-cmd --state 2> /dev/null || echo no) == "running" ] && echo yes || echo no'
+  register: is_firewalld_enabled
+
+- name: Extract the result of the firewalld check
+  set_fact:
+    is_firewalld_enabled: "{{is_firewalld_enabled.stdout | bool}}"
+
+- name: Add a firewall rule for etcd
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 2379-2380/tcp
+    permanent: yes
+    state: enabled
+
+- name: Restart the firewalld service to apply the firewall changes
+  when: is_firewalld_enabled
+  service:
+    name: firewalld
+    state: restarted
+
+- name: Enable the etcd service and ensure its running
+  service:
+    name: etcd
+    enabled: yes
+    state: started

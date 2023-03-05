@@ -1,0 +1,32 @@
+- name: Check for an existing CRI-O install
+  stat:
+    path: /etc/crio/crio.conf
+  register: crio_installed
+
+- name: Extract the result of the CRI-O install check
+  set_fact:
+    crio_installed: "{{crio_installed.stat.exists | bool}}"
+
+- name: Install conntrack
+  package:
+    name: conntrack-tools
+    state: latest
+
+- name: Install the CRI-O package
+  when: not crio_installed
+  package:
+    name: "{{crio_rpm_url}}"
+    disable_gpg_check: yes
+    state: installed
+
+- name: (Bugfix) Fix /etc/containers/policy.json to use old property named keyPath instead of keyPaths
+  replace:
+    path: /etc/containers/policy.json
+    regexp: '^(\s+)"keyPaths":.+$'
+    replace: '\1"keyPath": "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release"'
+
+- name: Enable the CRI-O service and ensure it's running
+  service:
+    name: crio
+    enabled: yes
+    state: started

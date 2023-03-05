@@ -1,0 +1,10 @@
+- name: Install the SMB storage driver into the cluster
+  command: >-
+    helm install csi-driver-smb csi-driver-smb
+    --repo https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/master/charts
+    --namespace kube-system
+    --version {{csi_driver_smb_version}}
+    --wait
+
+- name: Wait for the storage driver to become available
+  command: kubectl wait --for=condition=ready --timeout=300s --selector="app.kubernetes.io/name=csi-driver-smb" -n kube-system pods

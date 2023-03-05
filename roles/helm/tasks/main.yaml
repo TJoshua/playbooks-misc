@@ -1,0 +1,42 @@
+- name: Ensure that git is installed (required for Helm plugin installation)
+  package:
+    name: git
+    state: present
+
+- name: Ensure that GNU tar is installed (Alpine only) to support the unarchive Ansible module
+  when: ansible_distribution == "Alpine"
+  package:
+    name: tar
+    state: present
+
+- name: Determine if Helm is installed
+  stat:
+    path: /usr/local/bin/helm
+  register: helm_installed
+
+- name: Extract the result of the Helm install check
+  set_fact:
+    helm_installed: "{{helm_installed.stat.exists | bool}}"
+
+- name: Download a tarball of the Helm release
+  when: not helm_installed
+  get_url:
+    url: "{{helm_download_url}}"
+    dest: "$HOME/helm.tar.gz"
+
+- name: Untar the Helm release into the install folder
+  when: not helm_installed
+  unarchive:
+    remote_src: yes
+    src: "$HOME/helm.tar.gz"
+    dest: "/usr/local/bin"
+    extra_opts:
+      - --strip-components=1
+    include:
+      - linux-amd64/helm
+
+- name: Clean up the Helm tarball
+  when: not helm_installed
+  file:
+    path: "$HOME/helm.tar.gz"
+    state: absent

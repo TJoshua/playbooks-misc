@@ -1,0 +1,4 @@
+k8s_add_ingress: yes
+k8s_add_ingress_helm_version: "4.3.0"
+k8s_add_ingress_nodeport_http: 32080
+k8s_add_ingress_nodeport_https: 32443

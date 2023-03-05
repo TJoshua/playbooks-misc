@@ -1,0 +1,36 @@
+# Kubernetes
+k8s_version: "1.23.6"
+k8s_pod_subnet: "10.42.0.0/16"
+k8s_control_plane_endpoint: ""
+k8s_extra_cert_sans: []
+
+# CRI-O (remove file name from url and open in browser to get current release version/tag)
+crio_rpm_url: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/1.23/CentOS_8/x86_64/cri-o-1.23.5-3.1.el8.x86_64.rpm"
+
+# etcd
+etcd_version: "v3.5.3"
+etcd_install_path: "/opt/etcd"
+etcd_data_path: "/persistence/etcd"
+etcd_heartbeat_interval: 200
+etcd_election_timeout: 5000
+etcd_cluster: >-
+  {% for host in groups['etcd'] -%}
+    {{hostvars[host].ansible_hostname}}=http://{{hostvars[host].ansible_default_ipv4.address}}:2380{%- if not loop.last -%},{%- endif -%}
+  {%- endfor -%}
+
+# Helm
+helm_install: yes
+helm_download_url: "https://get.helm.sh/helm-v3.11.1-linux-amd64.tar.gz"
+
+# Calico
+calico_install: yes
+
+# ingress-nginx
+ingress_nginx_install: yes
+ingress_nginx_version: "4.3.0"
+ingress_nginx_nodeport_http: 32080
+ingress_nginx_nodeport_https: 32443
+
+# csi-driver-smb
+csi_driver_smb_install: yes
+csi_driver_smb_version: "1.10.0"

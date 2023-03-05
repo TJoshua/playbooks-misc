@@ -1,0 +1,15 @@
+- name: Install ingress-nginx into the cluster
+  command: >-
+    helm install ingress-nginx ingress-nginx
+    --repo https://kubernetes.github.io/ingress-nginx
+    --namespace ingress-nginx --create-namespace
+    --version {{ingress_nginx_version}}
+    --set controller.publishService.enabled=false
+    --set controller.service.type=NodePort
+    --set controller.service.nodePorts.http={{ingress_nginx_nodeport_http}}
+    --set controller.service.nodePorts.https={{ingress_nginx_nodeport_https}}
+    --set-string controller.config.use-forwarded-headers=true
+    --wait
+
+- name: Wait for ingress-nginx to become available
+  command: kubectl wait --for=condition=ready --timeout=300s --selector="app.kubernetes.io/name=ingress-nginx" -n ingress-nginx pods

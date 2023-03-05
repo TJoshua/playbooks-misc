@@ -1,0 +1,142 @@
+- name: Disable swap on boot
+  mount:
+    path: "{{item}}"
+    fstype: swap
+    state: absent
+  with_items:
+    - swap
+    - none
+
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Create a configuration file to load the required modules on boot
+  copy:
+    src: resources/k8s-modules.conf
+    dest: /etc/modules-load.d/k8s.conf
+
+- name: Enable the overlay boot module
+  community.general.modprobe:
+    name: overlay
+    state: present
+
+- name: Enable the br_netfilter boot module
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Create a configuration file to assign required sysctl parameters
+  copy:
+    src: resources/k8s-sysctl.conf
+    dest: /etc/sysctl.d/k8s.conf
+
+- name: Reload sysctl
+  command: sysctl --system
+
+- name: Check to see if SELinux is installed and enforcing policy
+  shell: '[ $(getenforce 2> /dev/null || echo no) == "Enforcing" ] && echo yes || echo no'
+  register: is_selinux_enabled
+
+- name: Extract the result of the SELinux check
+  set_fact:
+    is_selinux_enabled: "{{is_selinux_enabled.stdout | bool}}"
+
+- name: Generate an SELinux cil module file for allowing k8s to modify iptables
+  when: is_selinux_enabled
+  lineinfile:
+    path: /tmp/k8s-iptables.cil
+    create: yes
+    line: "(allow iptables_t cgroup_t (dir (ioctl)))"
+
+- name: Apply the SELinux cil module for allowing k8s to modify iptables
+  when: is_selinux_enabled
+  command: semodule -i /tmp/k8s-iptables.cil
+
+- name: Clean up the SELinux cil module
+  when: is_selinux_enabled
+  file:
+    path: /tmp/k8s-iptables.cil
+    state: absent
+
+- name: Check to see if firewalld is installed and enabled
+  shell: '[ $(firewall-cmd --state 2> /dev/null || echo no) == "running" ] && echo yes || echo no'
+  register: is_firewalld_enabled
+
+- name: Extract the result of the firewalld check
+  set_fact:
+    is_firewalld_enabled: "{{is_firewalld_enabled.stdout | bool}}"
+
+- name: Add a firewall rule for the kubelet api server
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 10250/tcp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for BGP
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 179/tcp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for VXLAN (linux kernel)
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 8472/udp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for VXLAN (IANA)
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 4789/udp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for NodePort services
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 30000-32767/tcp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule to enable NAT/masquerade support (changes the source ip to the network interface of traffic leaving it)
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    masquerade: true
+    permanent: yes
+    state: enabled
+
+- name: Restart the firewalld service to apply the firewall changes
+  when: is_firewalld_enabled
+  service:
+    name: firewalld
+    state: restarted
+
+- name: Install the Linux Traffic Control Utility package
+  package:
+    name: iproute-tc
+    state: latest
+    
+# TODO: Support for non-yum systems...
+- name: Create a Kubernetes repository file for yum
+  copy:
+    src: resources/k8s.repo
+    dest: /etc/yum.repos.d/kubernetes.repo
+    
+- name: Install kubelet, kubeadm, and kubectl
+  package:
+    name:
+      - "kubelet-{{k8s_version}}"
+      - "kubeadm-{{k8s_version}}"
+      - "kubectl-{{k8s_version}}"
+    state: installed
+    disable_excludes: kubernetes
+    
+- name: Enable the Kubernetes service and ensure it's running
+  service:
+    name: kubelet
+    enabled: yes
+    state: started

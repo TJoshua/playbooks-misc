@@ -1,0 +1,11 @@
+- name: Check to see if SELinux is installed and enforcing policy
+  shell: '[ $(getenforce 2> /dev/null || echo no) == "Enforcing" ] && echo yes || echo no'
+  register: is_selinux_enabled
+
+- name: Extract the result of the SELinux check
+  set_fact:
+    is_selinux_enabled: "{{is_selinux_enabled.stdout | bool}}"
+
+- name: Enable the SELinux flag to permit CIFS within a container
+  when: is_selinux_enabled
+  command: setsebool -P virt_use_samba 1

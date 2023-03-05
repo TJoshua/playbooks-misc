@@ -1,0 +1,130 @@
+- name: Determine which host is the primary master
+  command: echo "{% if inventory_hostname == groups['masters'][0] %}yes{% else %}no{% endif %}"
+  register: is_primary_master
+
+- name: Extract the primary master fact
+  set_fact:
+    is_primary_master: "{{is_primary_master.stdout | bool}}"
+
+- name: Check for an existing configuration
+  stat:
+    path: "/etc/kubernetes/kubelet.conf"
+  register: is_cluster_initialized
+
+- name: Extract the result of the configuration check
+  set_fact:
+    is_cluster_initialized: "{{is_cluster_initialized.stat.exists | bool}}"
+
+- name: Create the Kubernetes master node configuration yaml file
+  when: is_primary_master and not is_cluster_initialized
+  template:
+    src: templates/master-configuration.yaml.tpl
+    dest: "$HOME/master-configuration.yaml"
+
+- name: Check to see if firewalld is installed and enabled
+  shell: '[ $(firewall-cmd --state 2> /dev/null || echo no) == "running" ] && echo yes || echo no'
+  register: is_firewalld_enabled
+
+- name: Extract the result of the firewalld check
+  set_fact:
+    is_firewalld_enabled: "{{is_firewalld_enabled.stdout | bool}}"
+
+- name: Add a firewall rule for the api server
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 6443/tcp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for the kube controller manager
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 10257/tcp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for the kube scheduler
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 10259/tcp
+    permanent: yes
+    state: enabled
+
+- name: Restart the firewalld service to apply the firewall changes
+  when: is_firewalld_enabled
+  service:
+    name: firewalld
+    state: restarted
+
+- name: Initialize a new cluster and upload the certificates in case there are multiple masters
+  when: is_primary_master and not is_cluster_initialized
+  command: "kubeadm init --config $HOME/master-configuration.yaml --upload-certs"
+
+- name: Generate a token used to join the cluster
+  when: is_primary_master and not is_cluster_initialized
+  command: kubeadm token create --print-join-command
+  register: k8s_join_cmd
+
+- name: Extract the command from standard output needed to join the cluster
+  when: is_primary_master and not is_cluster_initialized
+  set_fact:
+    k8s_join_cmd: "{{k8s_join_cmd.stdout_lines[0]}}"
+
+- name: Determine the current user details
+  become: no
+  command: whoami
+  register: k8s_user
+
+- name: Extract the user details from the standard output
+  set_fact:
+    kubectl_user: "{{k8s_user.stdout}}"
+
+- name: Allow kubectl to work for the current user on the primary master
+  when: is_primary_master and not is_cluster_initialized
+  command: "{{item}}"
+  with_items:
+    - "mkdir -p /home/{{kubectl_user}}/.kube"
+    - "chown {{kubectl_user}}:{{kubectl_user}} /home/{{kubectl_user}}/.kube"
+    - "cp -i /etc/kubernetes/admin.conf /home/{{kubectl_user}}/.kube/config"
+    - "chown {{kubectl_user}}:{{kubectl_user}} /home/{{kubectl_user}}/.kube/config"
+
+- name: Install Helm
+  when: helm_install
+  include_role:
+    name: helm
+
+- name: Create the Calico networking manifest file
+  when: calico_install and is_primary_master and not is_cluster_initialized
+  become: no
+  template:
+    src: templates/calico.yaml.tpl
+    dest: "$HOME/calico.yaml"
+
+- name: Install Calico networking into the cluster
+  when: calico_install and is_primary_master and not is_cluster_initialized
+  become: no
+  command: "kubectl apply -f $HOME/calico.yaml"
+
+- name: Clean up the Calico networking manifest file
+  when: calico_install and is_primary_master and not is_cluster_initialized
+  become: no
+  file:
+    path: "$HOME/calico.yaml"
+    state: absent
+
+- name: Wait for all Calico components to become available
+  become: no
+  command: kubectl wait --for=condition=ready --timeout=300s --all-namespaces --all pods
+
+- name: "Join non-primary masters to the cluster"
+  when: not is_primary_master and not is_cluster_initialized
+  command: "{{hostvars[groups['masters'][0]].k8s_join_cmd}} --control-plane"
+
+- name: Allow kubectl to work for the current user on non-primary masters
+  when: not is_primary_master and not is_cluster_initialized
+  command: "{{item}}"
+  with_items:
+    - "mkdir -p /home/{{kubectl_user}}/.kube"
+    - "chown {{kubectl_user}}:{{kubectl_user}} /home/{{kubectl_user}}/.kube"
+    - "cp -i /etc/kubernetes/admin.conf /home/{{kubectl_user}}/.kube/config"
+    - "chown {{kubectl_user}}:{{kubectl_user}} /home/{{kubectl_user}}/.kube/config"

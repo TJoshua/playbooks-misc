@@ -1,0 +1,34 @@
+- name: Check to see if firewalld is installed and enabled
+  shell: '[ $(firewall-cmd --state 2> /dev/null || echo no) == "running" ] && echo yes || echo no'
+  register: is_firewalld_enabled
+
+- name: Extract the result of the firewalld check
+  set_fact:
+    is_firewalld_enabled: "{{is_firewalld_enabled.stdout | bool}}"
+
+- name: Add a firewall rule for HTTP
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 80/tcp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for HTTPS
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 443/tcp
+    permanent: yes
+    state: enabled
+
+- name: Add a firewall rule for nginx admission controller
+  when: is_firewalld_enabled
+  ansible.posix.firewalld:
+    port: 8443/tcp
+    permanent: yes
+    state: enabled
+
+- name: Restart the firewalld service to apply the firewall changes
+  when: is_firewalld_enabled
+  service:
+    name: firewalld
+    state: restarted

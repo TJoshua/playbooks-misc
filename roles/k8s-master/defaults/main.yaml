@@ -1,0 +1,9 @@
+k8s_version: "1.23.6"
+k8s_pod_subnet: "10.42.0.0/16"
+k8s_control_plane_endpoint: ""
+k8s_extra_cert_sans: []
+
+helm_install: yes
+helm_download_url: "https://get.helm.sh/helm-v3.11.1-linux-amd64.tar.gz"
+
+calico_install: yes

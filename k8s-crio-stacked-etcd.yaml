@@ -1,0 +1,90 @@
+# The following inventory groups are expected to exist before executing this playbook:
+# cluster   - Contains all master and worker machines
+# etcd      - Contains the machines that are etcd members
+# masters   - Contains the machines that are k8s masters
+# workers   - Contains the machines that are k8s workers
+
+- name: Install CRI-O on all master and worker nodes
+  hosts: cluster
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: k8s-crio-stacked-etcd-defaults
+    - role: crio
+
+- name: Install etcd
+  hosts: etcd
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: k8s-crio-stacked-etcd-defaults
+    - role: etcd
+
+- name: Install Kubernetes components required for both master and worker nodes
+  hosts: cluster
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: k8s-crio-stacked-etcd-defaults
+    - role: k8s-node
+
+- name: Configure master nodes
+  hosts: masters
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: k8s-crio-stacked-etcd-defaults
+    - role: k8s-master
+
+- name: Configure worker nodes
+  hosts: workers
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: k8s-worker
+
+- name: Configure firewall rules for the ingress cluster component
+  hosts: cluster
+  any_errors_fatal: yes
+  become: yes
+  pre_tasks:
+    - include_role:
+        name: k8s-crio-stacked-etcd-defaults
+  tasks:
+    - when: ingress_nginx_install
+      include_role:
+        name: ingress-nginx
+        tasks_from: configure-firewalld
+
+- name: Install the ingress cluster component
+  hosts: masters
+  any_errors_fatal: yes
+  become: no
+  roles:
+    - role: k8s-crio-stacked-etcd-defaults
+      when: is_primary_master and not is_cluster_initialized and ingress_nginx_install
+    - role: ingress-nginx
+      when: is_primary_master and not is_cluster_initialized and ingress_nginx_install
+
+- name: Configure SELinux for the storage driver cluster component
+  hosts: cluster
+  any_errors_fatal: yes
+  become: yes
+  pre_tasks:
+    - include_role:
+        name: k8s-crio-stacked-etcd-defaults
+  tasks:
+    - when: csi_driver_smb_install
+      include_role:
+        name: csi-driver-smb
+        tasks_from: configure-selinux
+
+- name: Install the storage driver cluster component
+  hosts: masters
+  any_errors_fatal: yes
+  become: no
+  roles:
+    - role: k8s-crio-stacked-etcd-defaults
+      when: is_primary_master and not is_cluster_initialized and csi_driver_smb_install
+    - role: csi-driver-smb
+      when: is_primary_master and not is_cluster_initialized and csi_driver_smb_install

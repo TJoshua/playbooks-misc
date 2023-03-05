@@ -1,0 +1,9 @@
+etcd_version: "v3.5.3"
+etcd_install_path: "/opt/etcd"
+etcd_data_path: "/persistence/etcd"
+etcd_heartbeat_interval: 200
+etcd_election_timeout: 5000
+etcd_cluster: >-
+  {% for host in groups['etcd'] -%}
+    {{hostvars[host].ansible_hostname}}=http://{{hostvars[host].ansible_default_ipv4.address}}:2380{%- if not loop.last -%},{%- endif -%}
+  {%- endfor -%}

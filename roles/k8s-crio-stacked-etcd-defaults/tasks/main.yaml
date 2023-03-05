@@ -1,0 +1,5 @@
+- set_fact:
+    ingress_nginx_install: "{{ingress_nginx_install}}"
+
+- set_fact:
+    csi_driver_smb_install: "{{csi_driver_smb_install}}"
