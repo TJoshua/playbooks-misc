@@ -1,0 +1,55 @@
+- name: Define a new yaml file for deploying AWX operator and AWX itself
+  template:
+    src: templates/kustomization.yaml.tpl
+    dest: "$HOME/kustomization.yaml"
+
+- name: Deploy AWX operator
+  shell: kustomize build $HOME | kubectl apply -f -
+
+- name: Wait up to 2 minutes for the AWX operator pod to exist
+  command: kubectl get pods --selector="control-plane=controller-manager" -n awx -o name
+  register: awx_operator_pod_name
+  until: awx_operator_pod_name.stdout | length > 0
+  delay: 10
+  retries: 12
+
+- name: Wait for the AWX operator to become available
+  command: kubectl wait --for=condition=ready --timeout=300s -n awx --all pods
+
+- name: Define a new yaml file to create AWX resources
+  no_log: yes
+  template:
+    src: templates/awx-app.yaml.tpl
+    dest: "$HOME/awx-app.yaml"
+
+- name: Update the kustomization.yaml file to uncomment the line to deploy AWX
+  replace:
+    path: "$HOME/kustomization.yaml"
+    regexp: '^(\s*)#(- awx-app.yaml)$'
+    replace: '\1\2'
+
+- name: Deploy AWX
+  shell: kustomize build $HOME | kubectl apply -f -
+
+- name: Wait up to 2 minutes for the AWX database pod to exist
+  command: kubectl get pods --selector="app.kubernetes.io/component=database" -n awx -o name
+  register: awx_database_pod_name
+  until: awx_database_pod_name.stdout | length > 0
+  delay: 10
+  retries: 12
+
+- name: Wait for the AWX database to be ready
+  command: kubectl wait --for=condition=ready --timeout=300s --selector="app.kubernetes.io/component=database" -n awx pods
+
+- name: Wait up to 2 minutes for the AWX pod to exist
+  command: kubectl get pods --selector="app.kubernetes.io/name=awx-app" -n awx -o name
+  register: awx_app_pod_name
+  until: awx_app_pod_name.stdout | length > 0
+  delay: 10
+  retries: 12
+
+- name: Wait for AWX to be ready
+  command: kubectl wait --for=condition=ready --timeout=300s --selector="app.kubernetes.io/name=awx-app" -n awx pods
+
+- debug:
+    msg: "AWX installation complete. Please allow up to 10-15 minutes for the database migrations to complete, at which point the web interface will become available."

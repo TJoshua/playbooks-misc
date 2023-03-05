@@ -1,0 +1,10 @@
+awx_version: "1.2.0"
+awx_nodeport: 30080
+awx_admin_default_password: "awxly"
+awx_database_username: "awx"
+awx_database_password: ""
+awx_use_local_storage: yes
+awx_smb_sql_path: ""
+awx_smb_projects_path: ""
+awx_smb_username: ""
+awx_smb_password: ""

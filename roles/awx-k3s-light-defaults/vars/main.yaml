@@ -1,0 +1,13 @@
+awx_version: "1.2.0"
+awx_nodeport: 32080
+awx_admin_default_password: "awxly"
+awx_database_username: "awx"
+awx_database_password: ""
+awx_use_local_storage: yes
+awx_smb_sql_path: ""
+awx_smb_projects_path: ""
+awx_smb_username: ""
+awx_smb_password: ""
+helm_download_url: "https://get.helm.sh/helm-v3.11.1-linux-amd64.tar.gz"
+csi_driver_smb_version: "1.10.0"
+kustomize_download_url: "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.0.0/kustomize_v5.0.0_linux_amd64.tar.gz"

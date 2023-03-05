@@ -1,0 +1,65 @@
+- name: Install k3s
+  hosts: all
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: k3s-light
+
+- name: Install Helm
+  hosts: all
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: awx-k3s-light-defaults
+    - role: helm
+      when: not awx_use_local_storage
+
+- name: Create the .kube directory for the root user
+  hosts: all
+  any_errors_fatal: yes
+  become: yes
+  tasks:
+    - name: Create the .kube directory
+      when: not awx_use_local_storage
+      file:
+        path: "$HOME/.kube"
+        state: directory
+        mode: "0750"
+
+- name: Create a symlink for the kube config file so that the Helm command works for root
+  hosts: all
+  any_errors_fatal: yes
+  become: yes
+  tasks:
+    - name: Create the symlink needed for Helm in a k3s environment
+      when: not awx_use_local_storage
+      file:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "$HOME/.kube/config"
+        state: link
+
+- name: Install the storage driver cluster component
+  hosts: all
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: awx-k3s-light-defaults
+      when: not awx_use_local_storage
+    - role: csi-driver-smb
+      when: not awx_use_local_storage
+
+- name: Install kustomize
+  hosts: all
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: awx-k3s-light-defaults
+    - role: kustomize
+
+- name: Install AWX
+  hosts: all
+  any_errors_fatal: yes
+  become: yes
+  roles:
+    - role: awx-k3s-light-defaults
+    - role: awx

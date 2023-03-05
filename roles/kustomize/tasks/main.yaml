@@ -1,0 +1,40 @@
+- name: Determine if kustomize is installed
+  stat:
+    path: /usr/local/bin/kustomize
+  register: kustomize_installed
+
+- name: Extract the result of the kustomize install check
+  set_fact:
+    kustomize_installed: "{{kustomize_installed.stat.exists | bool}}"
+
+- name: Ensure that GNU tar is installed (Alpine only) to support the unarchive Ansible module
+  when: ansible_distribution == "Alpine" and not kustomize_installed
+  package:
+    name: tar
+    state: present
+
+- name: Ensure that git is installed (required for kustomize)
+  package:
+    name: git
+    state: present
+
+- name: Download a tarball of the kustomize release
+  when: not kustomize_installed
+  get_url:
+    url: "{{kustomize_download_url}}"
+    dest: "$HOME/kustomize.tar.gz"
+
+- name: Untar the kustomize release into the install folder
+  when: not kustomize_installed
+  unarchive:
+    remote_src: yes
+    src: "$HOME/kustomize.tar.gz"
+    dest: "/usr/local/bin"
+    include:
+      - kustomize
+
+- name: Clean up the kustomize tarball
+  when: not kustomize_installed
+  file:
+    path: "$HOME/kustomize.tar.gz"
+    state: absent

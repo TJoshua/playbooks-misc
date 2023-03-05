@@ -1,0 +1,2 @@
+- set_fact:
+    awx_use_local_storage: "{{awx_use_local_storage}}"

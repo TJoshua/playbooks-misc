@@ -1,0 +1,17 @@
+- name: Ensure that curl is installed
+  package:
+    name: curl
+    state: present
+
+- name: Download the script to install k3s
+  get_url:
+    url: https://get.k3s.io
+    dest: "$HOME/install_k3s.sh"
+
+- name: Install k3s configured as a master and worker on the same node
+  command: "sh $HOME/install_k3s.sh"
+
+- name: Clean up the k3s install script
+  file:
+    path: "$HOME/install_k3s.sh"
+    state: absent
